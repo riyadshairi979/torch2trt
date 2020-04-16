@@ -19,9 +19,9 @@ def convert_ConvTranspose2d(ctx):
     padding = module.padding
     if not isinstance(padding, tuple):
         padding = (padding, ) * 2
-        
+
     kernel = module.weight.detach().cpu().numpy()
-    
+
     bias = trt.Weights(torch_dtype_to_trt(module.weight.dtype))
     if module.bias is not None:
         bias = module.bias.detach().cpu().numpy()
@@ -34,7 +34,23 @@ def convert_ConvTranspose2d(ctx):
         bias=bias)
     layer.stride = stride
     layer.padding = padding
-    
+
+    # Cruise changes start here
+    if hasattr(module, "output_padding") and module.output_padding != 0 and module.output_padding != (0, 0):    
+        if (
+            (module.padding != (1, 1) and module.padding != 1)
+            or module.output_padding != (0, 1)
+        ):
+            raise Exception(
+                "For ConvTranspose2d with output_padding only the following setting is supported. "
+                "Padding has to be (1, 1) while output_padding has to be (0, 1). "
+                "Normally this is used to upsample by an exact number. This logic may have further bugs, "
+                "we should do something more comprehensive here and add more testing..."
+            )
+
+        layer.padding_mode = trt.PaddingMode.SAME_LOWER
+    # Cruise changes end here
+
     if module.groups is not None:
         layer.num_groups = module.groups
 
